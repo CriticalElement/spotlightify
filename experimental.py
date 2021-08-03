@@ -7,11 +7,13 @@ import logging
 import string
 import random
 import time
+import typing
 
 from threading import Thread
 from requests.exceptions import RequestException
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)-8s - %(name)-14s - %(message)s')
+
+logger = logging.getLogger(__name__)
 
 
 class SpotifyPlayer:
@@ -22,14 +24,8 @@ class SpotifyPlayer:
     repeating_context = {'command': {'repeating_context': True, 'repeating_track': False, 'endpoint': 'set_options'}}
     repeating_track = {'command': {'repeating_context': True, 'repeating_track': True, 'endpoint': 'set_options'}}
     no_repeat = {'command': {'repeating_context': False, 'repeating_track': False, 'endpoint': 'set_options'}}
-
-    def shuffle(self):
-        self.shuffling = True
-        return {'command': {'value': True, 'endpoint': 'set_shuffling_context'}}
-
-    def stop_shuffle(self):
-        self.shuffling = False
-        return {'command': {'value': False, 'endpoint': 'set_shuffling_context'}}
+    shuffle = {'command': {'value': True, 'endpoint': 'set_shuffling_context'}}
+    stop_shuffle = {'command': {'value': False, 'endpoint': 'set_shuffling_context'}}
 
     @staticmethod
     def volume(volume):
@@ -51,8 +47,8 @@ class SpotifyPlayer:
         return {"command": {"context": {"uri": f"spotify:track:{track_id}",
                                         "url": f"context://spotify:track:{track_id}",
                                         "metadata": {}}, "play_origin":
-                                {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
-                                {"license": "on-demand", "skip_to": {"track_index": 0}, "player_options_override": {}},
+                            {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
+                            {"license": "on-demand", "skip_to": {"track_index": 0}, "player_options_override": {}},
                             "endpoint": "play"}}
 
     def remove_from_queue(self, track_id):
@@ -95,9 +91,9 @@ class SpotifyPlayer:
                     {"command": {"context": {"uri": f"{queue[0]['uri']}",
                                              "url": f"context://{queue[0]['uri']}",
                                              "metadata": {}}, "play_origin":
-                                     {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
-                                     {"license": "on-demand", "skip_to": {"track_index": skip_to},
-                                      "player_options_override": {}},
+                                 {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
+                                 {"license": "on-demand", "skip_to": {"track_index": skip_to},
+                                  "player_options_override": {}},
                                  "endpoint": "play"}}]
 
     def queue_from_uris(self, uris):
@@ -117,8 +113,8 @@ class SpotifyPlayer:
                 {"command": {"context": {"uri": queue[0]['uri'],
                                          "url": f'context://{queue[0]["uri"]}',
                                          "metadata": {}}, "play_origin":
-                                 {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
-                                 {"license": "on-demand", "skip_to": {"track_index": 0}, "player_options_override": {}},
+                             {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
+                             {"license": "on-demand", "skip_to": {"track_index": 0}, "player_options_override": {}},
                              "endpoint": "play"}}]
 
     def play_from_context(self, context_uri, skip_to=0):
@@ -129,9 +125,9 @@ class SpotifyPlayer:
         self.command({"command": {"context": {"uri": f"{context_uri}",
                                               "url": f"context://{context_uri}",
                                               "metadata": {}}, "play_origin":
-                                      {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
-                                      {"license": "on-demand", "skip_to": {"track_index": skip_to},
-                                       "player_options_override": {}},
+                                  {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
+                                  {"license": "on-demand", "skip_to": {"track_index": skip_to},
+                                   "player_options_override": {}},
                                   "endpoint": "play"}})
         time.sleep(0.75)
         context_songs = [track for track in self.queue if track['provider'] == 'context']
@@ -150,9 +146,9 @@ class SpotifyPlayer:
         self.command({"command": {"context": {"uri": f"{context_uri}",
                                               "url": f"context://{context_uri}",
                                               "metadata": {}}, "play_origin":
-                                      {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
-                                      {"license": "on-demand", "skip_to": {"track_index": skip_to},
-                                       "player_options_override": {}},
+                                  {"feature_identifier": "harmony", "feature_version": "4.11.0-af0ef98"}, "options":
+                                  {"license": "on-demand", "skip_to": {"track_index": skip_to},
+                                   "player_options_override": {}},
                                   "endpoint": "play"}})
         time.sleep(0.75)
         context_songs = [track for track in self.queue if track['provider'] == 'context']
@@ -163,14 +159,25 @@ class SpotifyPlayer:
         return {'command': {'next_tracks': queue, 'queue_revision': self.queue_revision,
                             'endpoint': 'set_queue'}}
 
-    def __init__(self):
+    def __init__(self, event_reciever: typing.List[typing.Callable] = None, cookie_str: str = None,
+                 cookie_path: str = None):
         self.isinitialized = False
-        try:
-            self.cj = browser_cookie3.chrome()
-            _ = self.cj._cookies['.spotify.com']['/']['sp_t']
+        if event_reciever is None:
+            event_reciever = [lambda: None]
+        if cookie_str:
             self.isinitialized = True
-        except Exception as e:
-            logging.error(e, exc_info=True)
+        if cookie_path:
+            self.isinitialized = True
+        self.cookie_path = cookie_path
+        self.cookie_str = cookie_str
+        if not self.isinitialized:
+            try:
+                self.cj = browser_cookie3.chrome()
+                # noinspection PyProtectedMember
+                _ = self.cj._cookies['.spotify.com']['/']['sp_t']
+                self.isinitialized = True
+            except Exception as e:
+                logger.error(e, exc_info=True)
         self._default_headers = {'sec-fetch-dest': 'empty',
                                  'sec-fetch-mode': 'cors',
                                  'sec-fetch-site': 'same-origin',
@@ -178,26 +185,39 @@ class SpotifyPlayer:
                                                '(KHTML, like Gecko) Chrome/87.0.4280.66 Safari/537.36'}
 
         self._session = requests.Session()
+        self.event_reciever = event_reciever
         self.shuffling = False
-        self.ping = False
-        self.running_pings = False
-        self.event_loop = None
+        self.looping = False
+        self.playing = False
+        self.force_disconnect = False
+        self.active_device_id = ''
+        self.current_volume = 65535
+        self._last_timestamp = 0
+        self._last_position = 0
+        self.last_command = None
+        self.time_executed = 0
         self.ws = None
         if self.isinitialized:
+            self.isinitialized = False
             self._authorize()
 
     def _authorize(self):
-        if self.running_pings:
-            asyncio.run_coroutine_threadsafe(self.ws.close(), self.event_loop)
+        if self.isinitialized:
+            self.isinitialized = False
         access_token_headers = self._default_headers.copy()
         access_token_headers.update({'spotify-app-version': '1.1.48.530.g38509c6c'})
-
         access_token_url = 'https://open.spotify.com/get_access_token?reason=transport&productType=web_player'
-        self._session = requests.Session()
-        response = self._session.get(access_token_url, headers=access_token_headers, cookies=self.cj)
+        if self.cookie_path:
+            with open(self.cookie_path, 'r') as f:
+                self.cookie_str = f.read()
+        if self.cookie_str:
+            access_token_headers.update({'cookie': self.cookie_str})
+            response = self._session.get(access_token_url, headers=access_token_headers)
+        else:
+            response = self._session.get(access_token_url, headers=access_token_headers, cookies=self.cj)
         access_token_response = response.json()
         self.access_token = access_token_response['accessToken']
-        self.access_token_expire = access_token_response['accessTokenExpirationTimestampMs']
+        self.access_token_expire = access_token_response['accessTokenExpirationTimestampMs'] / 1000
 
         guc_url = f'wss://guc-dealer.spotify.com/?access_token={self.access_token}'
         guc_headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)'
@@ -208,13 +228,11 @@ class SpotifyPlayer:
 
         async def websocket():
             async with websockets.connect(guc_url, extra_headers=guc_headers) as ws:
-                self.ping = True
                 self.ws = ws
-                if not self.running_pings:
-                    Thread(target=lambda: start_ping_loop()).start()
                 while True:
                     try:
                         self.isinitialized = True
+                        self.websocket_task_event_loop = asyncio.get_event_loop()
                         recv = await ws.recv()
                         load = json.loads(recv)
                         if load.get('headers'):
@@ -227,57 +245,92 @@ class SpotifyPlayer:
                                         self.queue = load['payloads'][0]['cluster']['player_state']['next_tracks']
                                     except KeyError:
                                         pass
+                                    try:
+                                        update_reason = load['payloads'][0]['update_reason']
+                                        if 'DEVICE' in update_reason:
+                                            self.devices = load['payloads'][0]['cluster']['devices']
+                                    except KeyError:
+                                        pass
                                     self.queue_revision = (load['payloads'][0]['cluster']['player_state']
-                                    ['queue_revision'])
-                                    self.shuffling = (load['payloads'][0]['cluster']['player_state']['options']
-                                    ['shuffling_context'])
+                                                           ['queue_revision'])
+                                    options = load['payloads'][0]['cluster']['player_state']['options']
+                                    try:
+                                        active_device = load['payloads'][0]['cluster']['active_device_id']
+                                        self.current_volume = (load['payloads'][0]['cluster']['devices'][active_device]
+                                                               ['volume'])
+                                        self.active_device_id = active_device
+                                    except KeyError:
+                                        self.active_device_id = ''
+                                    self.playing = not load['payloads'][0]['cluster']['player_state']['is_paused']
+                                    self.shuffling = options['shuffling_context']
+                                    try:
+                                        self._last_timestamp = int(load['payloads'][0]['cluster']['player_state']
+                                                                   ['timestamp'])
+                                    except KeyError:
+                                        self._last_timestamp = 0
+                                    position_ms = int(load['payloads'][0]['cluster']['player_state']
+                                                      ['position_as_of_timestamp'])
+                                    if position_ms != self._last_position:
+                                        self._last_position = position_ms
+                                    if options['repeating_track']:
+                                        self.looping = 'track'
+                                    elif options['repeating_context']:
+                                        self.looping = 'context'
+                                    else:
+                                        self.looping = 'off'
+                                    [event() for event in self.event_reciever]
                             except AttributeError:
                                 pass
-                    except websockets.exceptions.ConnectionClosedError as exc:
-                        logging.error(exc, exc_info=False)
-                        self.isinitialized = False
-                        break
-
-        def start_ping_loop():
-            asyncio.new_event_loop().run_until_complete(ping_loop())
+                    except websockets.exceptions.ConnectionClosed:
+                        return
 
         async def ping_loop():
-            self.running_pings = True
-            while self.ping:
-                if self.access_token_expire < time.time():
-                    self._authorize()
-                    while not self.isinitialized:
-                        pass
-                if self.ping:
-                    await self.ws.send('{"type": "ping"}')
-                await asyncio.sleep(30)
+            try:
+                while True:
+                    if self.isinitialized and self.ws:
+                        await self.ws.send('{"type": "ping"}')
+                        self.sleep_task_event_loop = asyncio.get_event_loop()
+                        await asyncio.sleep(5)
+                    else:
+                        await asyncio.sleep(1)  # don't lag the gui thread
+            except asyncio.CancelledError:
+                return
 
-        if not self.event_loop:
-            self.event_loop = asyncio.new_event_loop()
-        else:
-            self.event_loop = asyncio.get_event_loop()
-        Thread(target=lambda: self.event_loop.run_until_complete(websocket())).start()
+        async def run_until_complete():
+            self.tasks.append(asyncio.create_task(websocket()))
+            self.tasks.append(asyncio.create_task(ping_loop()))
+            await asyncio.gather(*self.tasks, return_exceptions=True)
+
+            if not self.force_disconnect:
+                self._authorize()
+
+        self.sleep_task_event_loop = None
+        self.websocket_task_event_loop = None
+        self.tasks = []
+        policy = asyncio.get_event_loop_policy()  # workaround to some dumb bug
+        policy._loop_factory = asyncio.SelectorEventLoop  # why does this work
+        Thread(target=asyncio.run, args=(run_until_complete(),)).start()
 
         device_url = 'https://guc-spclient.spotify.com/track-playback/v1/devices'
         self.device_id = ''.join(random.choices(string.ascii_letters, k=40))
         while True:
             if self.connection_id:
                 device_data = {"device": {"brand": "spotify", "capabilities":
-                    {"change_volume": True, "enable_play_token": True,
-                     "supports_file_media_type": True,
-                     "play_token_lost_behavior": "pause",
-                     "disable_connect": True, "audio_podcasts": True,
-                     "video_playback": True,
-                     "manifest_formats": ["file_urls_mp3",
-                                          "manifest_ids_video",
-                                          "file_urls_external",
-                                          "file_ids_mp4",
-                                          "file_ids_mp4_dual"]},
+                                          {"change_volume": True, "enable_play_token": True,
+                                           "supports_file_media_type": True,
+                                           "play_token_lost_behavior": "pause",
+                                           "disable_connect": True, "audio_podcasts": True,
+                                           "video_playback": True,
+                                           "manifest_formats": ["file_urls_mp3",
+                                                                "manifest_ids_video",
+                                                                "file_urls_external",
+                                                                "file_ids_mp4",
+                                                                "file_ids_mp4_dual"]},
                                           "device_id": self.device_id, "device_type": "computer",
                                           "metadata": {}, "model": "web_player", "name": "Spotify Player",
                                           "platform_identifier": "web_player windows 10;chrome 87.0.4280.66;desktop"},
                                "connection_id": self.connection_id, "client_version":
-                                   "harmony:4.11.0-af0ef98",
+                               "harmony:4.11.0-af0ef98",
                                "volume": 65535}
                 break
 
@@ -286,7 +339,7 @@ class SpotifyPlayer:
 
         response = self._session.post(device_url, headers=device_headers, data=json.dumps(device_data))
         if response.status_code == 200:
-            logging.log(logging.INFO, f'Successfully created Spotify device with id {self.device_id}.')
+            logger.info(f'Successfully created Spotify device with id {self.device_id}.')
 
         notifications_url = f'https://api.spotify.com/v1/me/notifications/user?connection_id={self.connection_id}'
         notifications_headers = self._default_headers.copy()
@@ -298,15 +351,38 @@ class SpotifyPlayer:
         hobs_headers.update({'authorization': f'Bearer {self.access_token}'})
         hobs_headers.update({'x-spotify-connection-id': self.connection_id})
         hobs_data = {"member_type": "CONNECT_STATE", "device": {"device_info":
-                                                                    {"capabilities": {"can_be_player": False,
-                                                                                      "hidden": True}}}}
+                                                                {"capabilities": {"can_be_player": False,
+                                                                                  "hidden": True}}}}
         response = self._session.put(hobs_url, headers=hobs_headers, data=json.dumps(hobs_data))
         try:
             self.queue = response.json()['player_state']['next_tracks']
         except KeyError:
             self.queue = []
-        self.queue_revision = response.json()['player_state']['queue_revision']
-        self.shuffling = response.json()['player_state']['options']['shuffling_context']
+        response_load = response.json()
+        response_options = response_load['player_state']['options']
+        try:
+            self.active_device_id = response_load['active_device_id']
+            self.devices = response_load['devices']
+            self.current_volume = response_load['devices'][self.active_device_id]['volume']
+            self.queue_revision = response_load['player_state']['queue_revision']
+            self.shuffling = response_options['shuffling_context']
+            self.playing = not response_load['player_state']['is_paused']
+            self._last_position = int(response_load['player_state']['position_as_of_timestamp'])
+            self._last_timestamp = int(response_load['player_state']['timestamp'])
+            if response_options['repeating_track']:
+                self.looping = 'track'
+            elif response_options['repeating_context']:
+                self.looping = 'context'
+            else:
+                self.looping = 'off'
+        except KeyError:
+            pass
+
+    def get_position(self):
+        if not self.playing:
+            return self._last_position / 1000
+        diff = time.time() - self._last_timestamp / 1000
+        return self._last_position / 1000 + diff
 
     def transfer(self, device_id):
         if self.access_token_expire < time.time():
@@ -321,22 +397,56 @@ class SpotifyPlayer:
         response = self._session.post(transfer_url, headers=transfer_headers, data=json.dumps(transfer_data))
         return response
 
+    def add_event_reciever(self, event_reciever: typing.Callable):
+        self.event_reciever.append(event_reciever)
+
+    def remove_event_reciever(self, event_reciever: typing.Callable):
+        if event_reciever in self.event_reciever:
+            self.event_reciever.pop(self.event_reciever.index(event_reciever))
+        else:
+            raise TypeError('The specified event reciever was not in the list of event recievers.')
+
+    def create_api_request(self, path, request_type='GET'):
+        if request_type.upper() in ['GET', 'PUT', 'DELETE', 'POST', 'PATCH', 'HEAD']:
+            try:
+                return getattr(self._session, request_type.lower())('https://api.spotify.com/v1' + path,
+                                                                    headers={'Authorization': f'Bearer'
+                                                                                              f' {self.access_token}'})
+            except RequestException:
+                return getattr(self._session, request_type.lower())('https://api.spotify.com/v1' + path,
+                                                                    headers={'Authorization': f'Bearer'
+                                                                                              f' {self.access_token}'})
+
+    def _cancel_tasks(self):
+        print(self.tasks)
+        self.websocket_task_event_loop.create_task(self.ws.close())
+        [task.cancel() for task in self.tasks]
+
+    def disconnect(self):
+        self.force_disconnect = True
+        self.websocket_task_event_loop.create_task(self.ws.close())
+
     def command(self, command_dict):
         if self.access_token_expire < time.time():
             self._authorize()
             while not self.isinitialized:
                 pass
         headers = {'Authorization': f'Bearer {self.access_token}'}
-        currently_playing_device = self._session.get('https://api.spotify.com/v1/me/player', headers=headers)
-        try:
-            currently_playing_device = currently_playing_device.json()['device']['id']
-        except json.decoder.JSONDecodeError:
-            currently_playing_device = self._session.get('https://api.spotify.com/v1/me/player/devices',
-                                                         headers=headers).json()['devices'][0]['id']
-            self.transfer(currently_playing_device)
-            time.sleep(1)
-            currently_playing_device = self._session.get('https://api.spotify.com/v1/me/player', headers=headers)
-            currently_playing_device = currently_playing_device.json()['device']['id']
+        if self.active_device_id:
+            currently_playing_device = self.active_device_id
+        else:
+            currently_playing_device = self._session.get('https://api.spotify.com/v1/me/player',
+                                                         headers=headers)
+            try:
+                currently_playing_device = currently_playing_device.json()['device']['id']
+            except json.decoder.JSONDecodeError or KeyError:
+                currently_playing_device = self._session.get('https://api.spotify.com/v1/me/player/devices',
+                                                             headers=headers).json()['devices'][0]['id']
+                self.transfer(currently_playing_device)
+                time.sleep(1)
+                currently_playing_device = self.active_device_id
+            except requests.exceptions.RequestException:
+                self._cancel_tasks()
         player_url = f'https://guc-spclient.spotify.com/connect-state/v1/player/command/from/{self.device_id}' \
                      f'/to/{currently_playing_device}'
         if isinstance(command_dict, list):
@@ -348,7 +458,7 @@ class SpotifyPlayer:
                 if response.status_code != 200:
                     raise RequestException(f'Command failed: {response.json()}')
                 else:
-                    logging.log(logging.INFO, 'Command executed successfully.')
+                    logger.info(f'Command executed successfully. {player_data}')
         else:
             if 'url' in command_dict:
                 player_url = command_dict['url'].replace('player', self.device_id).replace('device',
@@ -363,12 +473,13 @@ class SpotifyPlayer:
                     response = self._session.put(player_url, headers=headers, data=json.dumps(player_data))
                     if response.status_code != 200:
                         try:
-                            response.json()
                             raise RequestException(f'Command failed: {response.json()}')
                         except json.decoder.JSONDecodeError:
-                            pass
+                            raise RequestException(f'Command failed.')
                     else:
-                        logging.log(logging.INFO, 'Command executed successfully.')
+                        logger.info(f'Command executed successfully. {player_data}')
+                        self.time_executed = time.time()
+                        self.last_command = player_data
             else:
                 response = self._session.post(player_url, headers=headers, data=json.dumps(player_data))
                 if response.status_code != 200:
@@ -376,7 +487,9 @@ class SpotifyPlayer:
                         response.json()
                         raise RequestException(f'Command failed: {response.json()}')
                     except json.decoder.JSONDecodeError:
-                        pass
+                        raise RequestException(f'Command failed.')
                 else:
-                    logging.log(logging.INFO, 'Command executed successfully.')
+                    logger.info(f'Command executed successfully. {player_data}')
+                    self.time_executed = time.time()
+                    self.last_command = player_data
         time.sleep(0.5)
